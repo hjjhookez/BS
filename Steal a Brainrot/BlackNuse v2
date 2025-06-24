@@ -1,0 +1,838 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local Workspace = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+StarterGui:SetCore("ChatMakeSystemMessage", {
+    Text = "";
+    Color = Color3.new(0, 0, 0);
+    Font = Enum.Font.Gotham;
+    FontSize = Enum.FontSize.Size18;
+})
+
+pcall(function()
+    StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, false)
+    StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+end)
+
+local gui = nil
+local mainFrame = nil
+local toggleButton = nil
+local config = {
+    autoExecute = true
+}
+
+local currentSpeed = 0
+local speedConnection = nil
+local speedEnabled = false
+local espEnabled = false
+local espConnections = {}
+local espFolder = nil
+local espUpdateConnection = nil
+
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+local function saveConfig()
+    local success, err = pcall(function()
+        if writefile then
+            writefile("compact_gui_config.json", HttpService:JSONEncode(config))
+        end
+    end)
+end
+
+local function loadConfig()
+    local success, err = pcall(function()
+        if readfile and isfile("compact_gui_config.json") then
+            local data = HttpService:JSONDecode(readfile("compact_gui_config.json"))
+            config = data
+        end
+    end)
+end
+
+local function createTween(object, properties, duration, easingStyle, easingDirection)
+    local tweenInfo = TweenInfo.new(
+        duration or 0.3,
+        easingStyle or Enum.EasingStyle.Quart,
+        easingDirection or Enum.EasingDirection.Out
+    )
+    return TweenService:Create(object, tweenInfo, properties)
+end
+
+local function createESP(targetPlayer)
+    if targetPlayer == player then return end
+    
+    local character = targetPlayer.Character
+    if not character then return end
+    
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return end
+    
+    local espBox = Instance.new("BoxHandleAdornment")
+    espBox.Name = "ESP_" .. targetPlayer.Name
+    espBox.Adornee = humanoidRootPart
+    espBox.Size = Vector3.new(4, 6, 1)
+    espBox.Color3 = Color3.fromRGB(138, 43, 226)
+    espBox.Transparency = 0.7
+    espBox.AlwaysOnTop = true
+    espBox.ZIndex = 10
+    espBox.Parent = espFolder
+    
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Name = "ESP_Name_" .. targetPlayer.Name
+    billboardGui.Adornee = humanoidRootPart
+    billboardGui.Size = UDim2.new(0, 200, 0, 50)
+    billboardGui.StudsOffset = Vector3.new(0, 3, 0)
+    billboardGui.AlwaysOnTop = true
+    billboardGui.Parent = espFolder
+    
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = targetPlayer.Name
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextScaled = true
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nameLabel.Parent = billboardGui
+    
+    espConnections[targetPlayer] = {espBox, billboardGui}
+end
+
+local function updateESP()
+    if not espEnabled or not espFolder then return end
+    
+    for _, targetPlayer in pairs(Players:GetPlayers()) do
+        if targetPlayer ~= player and targetPlayer.Character then
+            local humanoidRootPart = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if humanoidRootPart then
+                if not espConnections[targetPlayer] then
+                    createESP(targetPlayer)
+                end
+                
+                if espConnections[targetPlayer] then
+                    local espBox = espConnections[targetPlayer][1]
+                    local billboardGui = espConnections[targetPlayer][2]
+                    
+                    if espBox and espBox.Parent then
+                        espBox.Adornee = humanoidRootPart
+                    end
+                    
+                    if billboardGui and billboardGui.Parent then
+                        billboardGui.Adornee = humanoidRootPart
+                        local nameLabel = billboardGui:FindFirstChild("TextLabel")
+                        if nameLabel then
+                            nameLabel.Text = targetPlayer.Name
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function toggleESP()
+    espEnabled = not espEnabled
+    
+    if espEnabled then
+        espFolder = Instance.new("Folder")
+        espFolder.Name = "ESP_Folder"
+        espFolder.Parent = Workspace
+        
+        for _, targetPlayer in pairs(Players:GetPlayers()) do
+            if targetPlayer.Character then
+                createESP(targetPlayer)
+            end
+        end
+        
+        espUpdateConnection = RunService.Heartbeat:Connect(function()
+            wait(0.1)
+            updateESP()
+        end)
+        
+        espConnections.playerAdded = Players.PlayerAdded:Connect(function(targetPlayer)
+            targetPlayer.CharacterAdded:Connect(function()
+                if espEnabled then
+                    wait(1)
+                    createESP(targetPlayer)
+                end
+            end)
+        end)
+        
+        espConnections.characterAdded = Players.PlayerRemoving:Connect(function(targetPlayer)
+            if espConnections[targetPlayer] then
+                for _, obj in pairs(espConnections[targetPlayer]) do
+                    if obj then obj:Destroy() end
+                end
+                espConnections[targetPlayer] = nil
+            end
+        end)
+        
+    else
+        if espUpdateConnection then
+            espUpdateConnection:Disconnect()
+            espUpdateConnection = nil
+        end
+        
+        if espFolder then
+            espFolder:Destroy()
+            espFolder = nil
+        end
+        
+        for _, connection in pairs(espConnections) do
+            if typeof(connection) == "RBXScriptConnection" then
+                connection:Disconnect()
+            elseif type(connection) == "table" then
+                for _, obj in pairs(connection) do
+                    if obj then obj:Destroy() end
+                end
+            end
+        end
+        espConnections = {}
+    end
+end
+
+local function enableSpeedHack()
+    if speedEnabled then
+        local character = player.Character or player.CharacterAdded:Wait()
+        local humanoid = character:WaitForChild("Humanoid")
+        
+        if speedConnection then
+            speedConnection:Disconnect()
+        end
+        
+        speedConnection = RunService.Heartbeat:Connect(function()
+            if character and humanoid and currentSpeed > 0 and speedEnabled then
+                local moveVector = humanoid.MoveDirection
+                if moveVector.Magnitude > 0 then
+                    character:TranslateBy(moveVector * currentSpeed / 10)
+                end
+            end
+        end)
+    else
+        if speedConnection then
+            speedConnection:Disconnect()
+            speedConnection = nil
+        end
+    end
+end
+
+local function toggleSpeedBoost()
+    speedEnabled = not speedEnabled
+    
+    if speedEnabled then
+        currentSpeed = 3
+        enableSpeedHack()
+    else
+        if speedConnection then
+            speedConnection:Disconnect()
+            speedConnection = nil
+        end
+    end
+end
+
+local function onCharacterAdded(character)
+    if speedEnabled then
+        enableSpeedHack()
+    end
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+if player.Character then
+    onCharacterAdded(player.Character)
+end
+
+local function enableAntiLag()
+    settings().Rendering.QualityLevel = 1
+    
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("ParticleEmitter") or obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
+            obj.Enabled = false
+        end
+    end
+end
+
+local function createToggleButton()
+    toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(0, 40, 0, 40)
+    toggleButton.Position = UDim2.new(1, -50, 0.5, -20)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    toggleButton.BorderSizePixel = 0
+    toggleButton.Text = ""
+    toggleButton.Parent = playerGui
+    
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 12)
+    toggleCorner.Parent = toggleButton
+    
+    local toggleGradient = Instance.new("UIGradient")
+    toggleGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(138, 43, 226)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(98, 23, 186))
+    }
+    toggleGradient.Rotation = 45
+    toggleGradient.Parent = toggleButton
+    
+    local toggleIcon = Instance.new("TextLabel")
+    toggleIcon.Size = UDim2.new(1, 0, 1, 0)
+    toggleIcon.BackgroundTransparency = 1
+    toggleIcon.Text = "⚙"
+    toggleIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleIcon.TextSize = 18
+    toggleIcon.Font = Enum.Font.GothamBold
+    toggleIcon.Parent = toggleButton
+    
+    local toggleShadow = Instance.new("Frame")
+    toggleShadow.Size = UDim2.new(1, 4, 1, 4)
+    toggleShadow.Position = UDim2.new(0, -2, 0, 2)
+    toggleShadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    toggleShadow.BackgroundTransparency = 0.8
+    toggleShadow.BorderSizePixel = 0
+    toggleShadow.ZIndex = toggleButton.ZIndex - 1
+    toggleShadow.Parent = toggleButton
+    
+    local shadowCorner = Instance.new("UICorner")
+    shadowCorner.CornerRadius = UDim.new(0, 12)
+    shadowCorner.Parent = toggleShadow
+    
+    toggleButton.Active = true
+    toggleButton.Draggable = true
+    
+    toggleButton.MouseEnter:Connect(function()
+        createTween(toggleButton, {Size = UDim2.new(0, 45, 0, 45)}, 0.2, Enum.EasingStyle.Back):Play()
+        createTween(toggleGradient, {
+            Color = ColorSequence.new{
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(158, 63, 246)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(118, 43, 206))
+            }
+        }, 0.2):Play()
+    end)
+    
+    toggleButton.MouseLeave:Connect(function()
+        createTween(toggleButton, {Size = UDim2.new(0, 40, 0, 40)}, 0.2, Enum.EasingStyle.Back):Play()
+        createTween(toggleGradient, {
+            Color = ColorSequence.new{
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(138, 43, 226)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(98, 23, 186))
+            }
+        }, 0.2):Play()
+    end)
+    
+    toggleButton.MouseButton1Down:Connect(function()
+        createTween(toggleButton, {Size = UDim2.new(0, 35, 0, 35)}, 0.1):Play()
+    end)
+    
+    toggleButton.MouseButton1Up:Connect(function()
+        createTween(toggleButton, {Size = UDim2.new(0, 40, 0, 40)}, 0.1):Play()
+    end)
+    
+    toggleButton.MouseButton1Click:Connect(function()
+        if gui and gui.Parent then
+            gui:Destroy()
+        else
+            createMainGUI()
+        end
+    end)
+end
+
+local function createMainGUI()
+    if gui then
+        gui:Destroy()
+    end
+    
+    gui = Instance.new("ScreenGui")
+    gui.Name = "CompactGUI"
+    gui.ResetOnSpawn = false
+    gui.Parent = playerGui
+    
+    local frameWidth = isMobile and 280 or 500
+    local frameHeight = isMobile and 320 or 380
+    
+    mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, frameWidth, 0, frameHeight)
+    mainFrame.Position = UDim2.new(0.5, -frameWidth/2, 0.5, -frameHeight/2)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Active = true
+    mainFrame.Draggable = true
+    mainFrame.Parent = gui
+    
+    local mainCorner = Instance.new("UICorner")
+    mainCorner.CornerRadius = UDim.new(0, 12)
+    mainCorner.Parent = mainFrame
+    
+    local mainGradient = Instance.new("UIGradient")
+    mainGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 20, 35)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 12, 20))
+    }
+    mainGradient.Rotation = 135
+    mainGradient.Parent = mainFrame
+    
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, isMobile and 35 or 40)
+    titleBar.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = mainFrame
+    
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 12)
+    titleCorner.Parent = titleBar
+    
+    local titleGradient = Instance.new("UIGradient")
+    titleGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(158, 63, 246)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(118, 23, 206))
+    }
+    titleGradient.Rotation = 45
+    titleGradient.Parent = titleBar
+    
+    local titleText = Instance.new("TextLabel")
+    titleText.Size = UDim2.new(0.8, 0, 1, 0)
+    titleText.Position = UDim2.new(0.05, 0, 0, 0)
+    titleText.BackgroundTransparency = 1
+    titleText.Text = "BlackNuse GUI"
+    titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleText.TextSize = isMobile and 12 or 16
+    titleText.Font = Enum.Font.GothamBold
+    titleText.TextXAlignment = Enum.TextXAlignment.Left
+    titleText.Parent = titleBar
+    
+    local currentTab = "Scripts"
+    local tabs = {"Scripts", "Others", "Settings"}
+
+    local scriptsButtons = {
+        {name = "Instant Steal", script = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/Youifpg/Steal-a-Brianrot/refs/heads/main/InSTANTSTEAL.lua"))()'},
+        {name = "Fly Bypass", script = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/Youifpg/Steal-a-Brianrot/refs/heads/main/FlyBypassed.lua"))()'},
+        {name = "Speed Boost", script = function() toggleSpeedBoost() end, isToggle = true},
+        {name = "ESP Toggle", script = function() toggleESP() end, isToggle = true}
+    }
+
+    local othersButtons = {
+        {name = "Secret Finder", script = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/Youifpg/Steal-a-Brianrot/refs/heads/main/Secrets%20finder.lua"))()'},
+        {name = "Kick Bypass", script = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/Youifpg/Steal-a-Brianrot/refs/heads/main/bypasskick.lua"))()'},
+        {name = "Invisible Mode", script = [[
+            local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
+            local cloak = character:FindFirstChild("Invisibility Cloak")
+            if cloak and cloak:GetAttribute("SpeedModifier") == 2 then
+                cloak.Parent = workspace
+            end
+        ]]},
+        {name = "Anti-Lag", script = function() enableAntiLag() end}
+    }
+
+    local tabFrame = Instance.new("Frame")
+    tabFrame.Size = UDim2.new(1, -10, 0, isMobile and 25 or 30)
+    tabFrame.Position = UDim2.new(0, 5, 0, isMobile and 40 or 45)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Parent = mainFrame
+
+    for i, tabName in ipairs(tabs) do
+        local tabButton = Instance.new("TextButton")
+        tabButton.Size = UDim2.new(0.32, 0, 1, 0)
+        tabButton.Position = UDim2.new((i-1) * 0.34, 0, 0, 0)
+        tabButton.BackgroundColor3 = currentTab == tabName and Color3.fromRGB(138, 43, 226) or Color3.fromRGB(35, 35, 45)
+        tabButton.BorderSizePixel = 0
+        tabButton.Text = tabName:upper()
+        tabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tabButton.TextSize = isMobile and 8 or 10
+        tabButton.Font = Enum.Font.GothamBold
+        tabButton.Parent = tabFrame
+        
+        local tabCorner = Instance.new("UICorner")
+        tabCorner.CornerRadius = UDim.new(0, 6)
+        tabCorner.Parent = tabButton
+        
+        tabButton.MouseButton1Click:Connect(function()
+            currentTab = tabName
+            updateContent()
+            
+            for _, child in pairs(tabFrame:GetChildren()) do
+                if child:IsA("TextButton") then
+                    createTween(child, {
+                        BackgroundColor3 = child.Text == currentTab:upper() and Color3.fromRGB(138, 43, 226) or Color3.fromRGB(35, 35, 45)
+                    }, 0.2):Play()
+                end
+            end
+        end)
+    end
+
+    local contentFrame = Instance.new("ScrollingFrame")
+    contentFrame.Size = UDim2.new(1, -10, 1, isMobile and -75 or -85)
+    contentFrame.Position = UDim2.new(0, 5, 0, isMobile and 70 or 80)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.BorderSizePixel = 0
+    contentFrame.ScrollBarThickness = 4
+    contentFrame.ScrollBarImageColor3 = Color3.fromRGB(138, 43, 226)
+    contentFrame.Parent = mainFrame
+
+    function updateContent()
+        for _, child in pairs(contentFrame:GetChildren()) do
+            if not child:IsA("UIGridLayout") and not child:IsA("UIListLayout") then
+                child:Destroy()
+            end
+        end
+        
+        if currentTab == "Scripts" then
+            local speedFrame = Instance.new("Frame")
+            speedFrame.Size = UDim2.new(1, 0, 0, isMobile and 50 or 60)
+            speedFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+            speedFrame.BorderSizePixel = 0
+            speedFrame.Parent = contentFrame
+            
+            local speedCorner = Instance.new("UICorner")
+            speedCorner.CornerRadius = UDim.new(0, 8)
+            speedCorner.Parent = speedFrame
+            
+            local speedTitle = Instance.new("TextLabel")
+            speedTitle.Size = UDim2.new(1, 0, 0, isMobile and 15 or 20)
+            speedTitle.Position = UDim2.new(0, 0, 0, 3)
+            speedTitle.BackgroundTransparency = 1
+            speedTitle.Text = "SPEED CONTROL"
+            speedTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+            speedTitle.TextSize = isMobile and 9 or 12
+            speedTitle.Font = Enum.Font.GothamBold
+            speedTitle.Parent = speedFrame
+            
+            local speedSlider = Instance.new("Frame")
+            speedSlider.Size = UDim2.new(0.9, 0, 0, 4)
+            speedSlider.Position = UDim2.new(0.05, 0, 0, isMobile and 20 or 30)
+            speedSlider.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+            speedSlider.BorderSizePixel = 0
+            speedSlider.Parent = speedFrame
+            
+            local sliderCorner = Instance.new("UICorner")
+            sliderCorner.CornerRadius = UDim.new(0, 2)
+            sliderCorner.Parent = speedSlider
+            
+            local speedHandle = Instance.new("TextButton")
+            speedHandle.Size = UDim2.new(0, isMobile and 12 or 16, 0, isMobile and 12 or 16)
+            speedHandle.Position = UDim2.new(0, isMobile and -6 or -8, 0, isMobile and -4 or -6)
+            speedHandle.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+            speedHandle.BorderSizePixel = 0
+            speedHandle.Text = ""
+            speedHandle.Parent = speedSlider
+            
+            local handleCorner = Instance.new("UICorner")
+            handleCorner.CornerRadius = UDim.new(1, 0)
+            handleCorner.Parent = speedHandle
+            
+            local speedValue = Instance.new("TextLabel")
+            speedValue.Size = UDim2.new(1, 0, 0, 12)
+            speedValue.Position = UDim2.new(0, 0, 0, isMobile and 35 or 45)
+            speedValue.BackgroundTransparency = 1
+            speedValue.Text = "Speed: " .. currentSpeed .. (speedEnabled and " (ON)" or " (OFF)")
+            speedValue.TextColor3 = speedEnabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(180, 180, 180)
+            speedValue.TextSize = isMobile and 8 or 10
+            speedValue.Font = Enum.Font.Gotham
+            speedValue.Parent = speedFrame
+            
+            local dragging = false
+            
+            local function updateSlider(input)
+                local mouse = input.Position or UserInputService:GetMouseLocation()
+                local sliderPos = speedSlider.AbsolutePosition
+                local sliderSize = speedSlider.AbsoluteSize
+                
+                local relativeX = math.clamp(mouse.X - sliderPos.X, 0, sliderSize.X)
+                local percentage = relativeX / sliderSize.X
+                
+                speedHandle.Position = UDim2.new(0, relativeX - (isMobile and 6 or 8), 0, isMobile and -4 or -6)
+                currentSpeed = math.floor(percentage * 10)
+                speedValue.Text = "Speed: " .. currentSpeed .. (speedEnabled and " (ON)" or " (OFF)")
+                speedValue.TextColor3 = speedEnabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(180, 180, 180)
+                
+                if speedEnabled then
+                    enableSpeedHack()
+                end
+            end
+            
+            speedHandle.MouseButton1Down:Connect(function()
+                dragging = true
+            end)
+            
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = false
+                end
+            end)
+            
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    updateSlider(input)
+                end
+            end)
+            
+            for i, data in ipairs(scriptsButtons) do
+                local buttonWidth = isMobile and 1 or 0.48
+                local buttonHeight = isMobile and 35 or 40
+                local buttonX = isMobile and 0 or ((i-1) % 2 * 0.52)
+                local buttonY = isMobile and (60 + (i-1) * 40) or (70 + math.floor((i-1) / 2) * 45)
+                
+                local button = Instance.new("TextButton")
+                button.Size = UDim2.new(buttonWidth, 0, 0, buttonHeight)
+                button.Position = UDim2.new(buttonX, 0, 0, buttonY)
+                button.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+                button.BorderSizePixel = 0
+                button.Text = data.name:upper()
+                button.TextColor3 = Color3.fromRGB(255, 255, 255)
+                button.TextSize = isMobile and 8 or 10
+                button.Font = Enum.Font.GothamBold
+                button.Parent = contentFrame
+                
+                local buttonCorner = Instance.new("UICorner")
+                buttonCorner.CornerRadius = UDim.new(0, 6)
+                buttonCorner.Parent = button
+                
+                button.MouseEnter:Connect(function()
+                    createTween(button, {BackgroundColor3 = Color3.fromRGB(138, 43, 226)}, 0.2):Play()
+                end)
+                
+                button.MouseLeave:Connect(function()
+                    local baseColor = Color3.fromRGB(35, 35, 45)
+                    if data.isToggle then
+                        if data.name == "Speed Boost" and speedEnabled then
+                            baseColor = Color3.fromRGB(76, 175, 80)
+                        elseif data.name == "ESP Toggle" and espEnabled then
+                            baseColor = Color3.fromRGB(76, 175, 80)
+                        end
+                    end
+                    createTween(button, {BackgroundColor3 = baseColor}, 0.2):Play()
+                end)
+                
+                button.MouseButton1Click:Connect(function()
+                    if data.isToggle then
+                        data.script()
+                        
+                        if data.name == "Speed Boost" then
+                            button.Text = speedEnabled and "SPEED: ON" or "SPEED: OFF"
+                            button.BackgroundColor3 = speedEnabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(35, 35, 45)
+                            if speedValue then
+                                speedValue.Text = "Speed: " .. currentSpeed .. (speedEnabled and " (ON)" or " (OFF)")
+                                speedValue.TextColor3 = speedEnabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(180, 180, 180)
+                            end
+                        elseif data.name == "ESP Toggle" then
+                            button.Text = espEnabled and "ESP: ON" or "ESP: OFF"
+                            button.BackgroundColor3 = espEnabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(35, 35, 45)
+                        end
+                    else
+                        local success, error = pcall(function()
+                            if type(data.script) == "function" then
+                                data.script()
+                            else
+                                loadstring(data.script)()
+                            end
+                        end)
+                        
+                        if success then
+                            createTween(button, {BackgroundColor3 = Color3.fromRGB(76, 175, 80)}, 0.2):Play()
+                            spawn(function()
+                                wait(0.8)
+                                createTween(button, {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}, 0.2):Play()
+                            end)
+                        else
+                            createTween(button, {BackgroundColor3 = Color3.fromRGB(244, 67, 54)}, 0.2):Play()
+                            spawn(function()
+                                wait(0.8)
+                                createTween(button, {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}, 0.2):Play()
+                            end)
+                        end
+                    end
+                end)
+            end
+            
+            contentFrame.CanvasSize = UDim2.new(0, 0, 0, isMobile and (60 + #scriptsButtons * 40) or (70 + math.ceil(#scriptsButtons / 2) * 45))
+            
+        elseif currentTab == "Others" then
+            for i, data in ipairs(othersButtons) do
+                local buttonWidth = isMobile and 1 or 0.48
+                local buttonHeight = isMobile and 35 or 40
+                local buttonX = isMobile and 0 or ((i-1) % 2 * 0.52)
+                local buttonY = isMobile and ((i-1) * 40) or (math.floor((i-1) / 2) * 45)
+                
+                local button = Instance.new("TextButton")
+                button.Size = UDim2.new(buttonWidth, 0, 0, buttonHeight)
+                button.Position = UDim2.new(buttonX, 0, 0, buttonY)
+                button.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+                button.BorderSizePixel = 0
+                button.Text = data.name:upper()
+                button.TextColor3 = Color3.fromRGB(255, 255, 255)
+                button.TextSize = isMobile and 8 or 10
+                button.Font = Enum.Font.GothamBold
+                button.Parent = contentFrame
+                
+                local buttonCorner = Instance.new("UICorner")
+                buttonCorner.CornerRadius = UDim.new(0, 6)
+                buttonCorner.Parent = button
+                
+                button.MouseEnter:Connect(function()
+                    createTween(button, {BackgroundColor3 = Color3.fromRGB(138, 43, 226)}, 0.2):Play()
+                end)
+                
+                button.MouseLeave:Connect(function()
+                    createTween(button, {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}, 0.2):Play()
+                end)
+                
+                button.MouseButton1Click:Connect(function()
+                    local success, error = pcall(function()
+                        if type(data.script) == "function" then
+                            data.script()
+                        else
+                            loadstring(data.script)()
+                        end
+                    end)
+                    
+                    if success then
+                        createTween(button, {BackgroundColor3 = Color3.fromRGB(76, 175, 80)}, 0.2):Play()
+                        spawn(function()
+                            wait(0.8)
+                            createTween(button, {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}, 0.2):Play()
+                        end)
+                    else
+                        createTween(button, {BackgroundColor3 = Color3.fromRGB(244, 67, 54)}, 0.2):Play()
+                        spawn(function()
+                            wait(0.8)
+                            createTween(button, {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}, 0.2):Play()
+                        end)
+                    end
+                end)
+            end
+            
+            contentFrame.CanvasSize = UDim2.new(0, 0, 0, isMobile and (#othersButtons * 40) or (math.ceil(#othersButtons / 2) * 45))
+            
+        elseif currentTab == "Settings" then
+            local autoExecFrame = Instance.new("Frame")
+            autoExecFrame.Size = UDim2.new(1, 0, 0, isMobile and 40 or 50)
+            autoExecFrame.Position = UDim2.new(0, 0, 0, 5)
+            autoExecFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+            autoExecFrame.BorderSizePixel = 0
+            autoExecFrame.Parent = contentFrame
+            
+            local autoExecCorner = Instance.new("UICorner")
+            autoExecCorner.CornerRadius = UDim.new(0, 8)
+            autoExecCorner.Parent = autoExecFrame
+            
+            local autoExecLabel = Instance.new("TextLabel")
+            autoExecLabel.Size = UDim2.new(0.6, 0, 1, 0)
+            autoExecLabel.Position = UDim2.new(0.05, 0, 0, 0)
+            autoExecLabel.BackgroundTransparency = 1
+            autoExecLabel.Text = "AUTO EXECUTE"
+            autoExecLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            autoExecLabel.TextSize = isMobile and 9 or 12
+            autoExecLabel.Font = Enum.Font.GothamBold
+            autoExecLabel.TextXAlignment = Enum.TextXAlignment.Left
+            autoExecLabel.Parent = autoExecFrame
+            
+            local autoExecToggle = Instance.new("TextButton")
+            autoExecToggle.Size = UDim2.new(0, isMobile and 60 or 80, 0, isMobile and 25 or 30)
+            autoExecToggle.Position = UDim2.new(0.7, 0, 0.5, isMobile and -12 or -15)
+            autoExecToggle.BackgroundColor3 = config.autoExecute and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(60, 60, 70)
+            autoExecToggle.BorderSizePixel = 0
+            autoExecToggle.Text = config.autoExecute and "ON" or "OFF"
+            autoExecToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+            autoExecToggle.TextSize = isMobile and 8 or 10
+            autoExecToggle.Font = Enum.Font.GothamBold
+            autoExecToggle.Parent = autoExecFrame
+            
+            local toggleCorner = Instance.new("UICorner")
+            toggleCorner.CornerRadius = UDim.new(0, isMobile and 12 or 15)
+            toggleCorner.Parent = autoExecToggle
+            
+            autoExecToggle.MouseButton1Click:Connect(function()
+                config.autoExecute = not config.autoExecute
+                saveConfig()
+                
+                autoExecToggle.Text = config.autoExecute and "ON" or "OFF"
+                createTween(autoExecToggle, {
+                    BackgroundColor3 = config.autoExecute and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(60, 60, 70)
+                }, 0.3):Play()
+            end)
+            
+            local rejoinButton = Instance.new("TextButton")
+            rejoinButton.Size = UDim2.new(1, 0, 0, isMobile and 40 or 50)
+            rejoinButton.Position = UDim2.new(0, 0, 0, isMobile and 50 or 60)
+            rejoinButton.BackgroundColor3 = Color3.fromRGB(255, 152, 0)
+            rejoinButton.BorderSizePixel = 0
+            rejoinButton.Text = "REJOIN SERVER"
+            rejoinButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            rejoinButton.TextSize = isMobile and 10 or 12
+            rejoinButton.Font = Enum.Font.GothamBold
+            rejoinButton.Parent = contentFrame
+            
+            local rejoinCorner = Instance.new("UICorner")
+            rejoinCorner.CornerRadius = UDim.new(0, 8)
+            rejoinCorner.Parent = rejoinButton
+            
+            rejoinButton.MouseButton1Click:Connect(function()
+                TeleportService:Teleport(game.PlaceId, player)
+            end)
+            
+            contentFrame.CanvasSize = UDim2.new(0, 0, 0, isMobile and 100 or 120)
+        end
+    end
+
+    updateContent()
+
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0, isMobile and 25 or 30, 0, isMobile and 25 or 30)
+    closeButton.Position = UDim2.new(1, isMobile and -30 or -35, 0, 5)
+    closeButton.BackgroundColor3 = Color3.fromRGB(244, 67, 54)
+    closeButton.BorderSizePixel = 0
+    closeButton.Text = "×"
+    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeButton.TextSize = isMobile and 12 or 16
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.Parent = titleBar
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 6)
+    closeCorner.Parent = closeButton
+    
+    closeButton.MouseButton1Click:Connect(function()
+        createTween(mainFrame, {Position = UDim2.new(0.5, -frameWidth/2, -1, 0)}, 0.4):Play()
+        wait(0.4)
+        gui:Destroy()
+    end)
+    
+    mainFrame.Position = UDim2.new(0.5, -frameWidth/2, -1, 0)
+    createTween(mainFrame, {Position = UDim2.new(0.5, -frameWidth/2, 0.5, -frameHeight/2)}, 0.8, Enum.EasingStyle.Back):Play()
+end
+
+local function checkAutoExecute()
+    if config.autoExecute then
+        wait(2)
+        createMainGUI()
+        return true
+    end
+    return false
+end
+
+local function initialize()
+    loadConfig()
+    createToggleButton()
+    
+    if not checkAutoExecute() then
+        createMainGUI()
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.Insert then
+        if gui and gui.Parent then
+            gui:Destroy()
+        else
+            createMainGUI()
+        end
+    end
+end)
+
+initialize()
