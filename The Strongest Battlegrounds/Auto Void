@@ -1,0 +1,224 @@
+--off and on = work
+game:GetService("StarterGui"):SetCore("SendNotification",{
+    Title = "Auto Void Kill",
+    Text = "by 09gw",
+    Duration = 4
+})
+
+
+local TweenService = game:GetService("TweenService")
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local BlurEffect = Instance.new("BlurEffect")
+local Title = Instance.new("TextLabel")
+local ToggleButton = Instance.new("TextButton")
+local EnableButton = Instance.new("TextButton")
+local StatusLabel = Instance.new("TextLabel")
+
+
+local COLORS = {
+    BACKGROUND = Color3.fromRGB(30, 30, 40),
+    BUTTON = Color3.fromRGB(65, 105, 225),  
+    BUTTON_HOVER = Color3.fromRGB(100, 149, 237),  
+    TEXT = Color3.fromRGB(255, 255, 255),
+    STATUS_ACTIVE = Color3.fromRGB(100, 255, 100),
+    STATUS_INACTIVE = Color3.fromRGB(200, 200, 200)
+}
+
+
+BlurEffect.Parent = game:GetService("Lighting")
+BlurEffect.Size = 0
+
+
+ScreenGui.Parent = game.CoreGui
+
+
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = COLORS.BACKGROUND
+MainFrame.BorderSizePixel = 0
+MainFrame.Size = UDim2.new(0, 250, 0, 150)
+MainFrame.Position = UDim2.new(0, 10, 0.5, -75)
+MainFrame.Visible = false
+MainFrame.ClipsDescendants = true
+
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 10)
+UICorner.Parent = MainFrame
+
+
+Title.Parent = MainFrame
+Title.Text = "Auto Void Kill"
+Title.BackgroundTransparency = 1
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Font = Enum.Font.GothamBold
+Title.TextColor3 = COLORS.TEXT
+Title.TextSize = 22
+
+
+ToggleButton.Parent = ScreenGui
+ToggleButton.Text = "+"
+ToggleButton.Size = UDim2.new(0, 40, 0, 40)
+ToggleButton.Position = UDim2.new(0, 10, 0.5, -130)
+ToggleButton.BackgroundColor3 = COLORS.BUTTON
+ToggleButton.BorderSizePixel = 0
+ToggleButton.TextColor3 = COLORS.TEXT
+ToggleButton.TextSize = 25
+ToggleButton.Font = Enum.Font.GothamBold
+
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 10)
+ToggleCorner.Parent = ToggleButton
+
+
+EnableButton.Parent = MainFrame
+EnableButton.Text = "Enabled"  
+EnableButton.BackgroundColor3 = COLORS.BUTTON
+EnableButton.BorderSizePixel = 0
+EnableButton.Size = UDim2.new(1, -40, 0, 35)
+EnableButton.Position = UDim2.new(0, 20, 0, 60)
+EnableButton.TextColor3 = COLORS.TEXT
+EnableButton.TextSize = 16
+EnableButton.Font = Enum.Font.GothamBold
+
+
+local EnableCorner = Instance.new("UICorner")
+EnableCorner.CornerRadius = UDim.new(0, 8)
+EnableCorner.Parent = EnableButton
+
+
+StatusLabel.Parent = MainFrame
+StatusLabel.Text = "Status: Active"  
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Size = UDim2.new(1, -40, 0, 30)
+StatusLabel.Position = UDim2.new(0, 20, 0, 105)
+StatusLabel.TextColor3 = COLORS.STATUS_ACTIVE  
+StatusLabel.TextSize = 14
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+
+local function createButtonAnimation(button)
+    button.MouseEnter:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.3), {BackgroundColor3 = COLORS.BUTTON_HOVER}):Play()
+    end)
+    
+    button.MouseLeave:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.3), {BackgroundColor3 = COLORS.BUTTON}):Play()
+    end)
+    
+    button.MouseButton1Down:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.1), {Size = button.Size - UDim2.new(0, 2, 0, 2)}):Play()
+    end)
+    
+    button.MouseButton1Up:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.1), {Size = button.Size + UDim2.new(0, 2, 0, 2)}):Play()
+    end)
+end
+
+createButtonAnimation(ToggleButton)
+createButtonAnimation(EnableButton)
+
+
+ToggleButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+    local targetSize = MainFrame.Visible and 20 or 0
+    
+    TweenService:Create(BlurEffect, TweenInfo.new(0.3), {Size = targetSize}):Play()
+    
+    if MainFrame.Visible then
+        MainFrame.Size = UDim2.new(0, 250, 0, 0)
+        TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Size = UDim2.new(0, 250, 0, 150)}):Play()
+        ToggleButton.Text = "-"
+    else
+        TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Size = UDim2.new(0, 250, 0, 0)}):Play()
+        ToggleButton.Text = "+"
+    end
+end)
+
+
+local scriptEnabled = true  
+EnableButton.MouseButton1Click:Connect(function()
+    scriptEnabled = not scriptEnabled
+    
+    if scriptEnabled then
+        EnableButton.Text = "Enabled"
+        StatusLabel.Text = "Status: Active"
+        StatusLabel.TextColor3 = COLORS.STATUS_ACTIVE
+        
+        workspace.FallenPartsDestroyHeight = 0/0
+
+        if getgenv().loop then
+            coroutine.close(getgenv().loop)
+            getgenv().loop = nil
+        end
+        local animations = {
+            ["rbxassetid://12273188754"]=1.311,
+            ["rbxassetid://12296113986"]=1.2,
+        }
+        function ifind(t,a)
+            for i,v in pairs(t) do
+                if i==a then
+                    return i
+                end
+            end
+            return false
+        end
+        local plr = game.Players.LocalPlayer
+        getgenv().loop = coroutine.create(function()
+            local dothetech = false
+            local lastcf
+            while task.wait() do 
+                local character = plr.Character
+                local animate = character.Humanoid.Animator
+
+                for i,v in pairs(animate:GetPlayingAnimationTracks()) do
+                    if ifind(animations, v.Animation.AnimationId) then
+                        task.wait(animations[v.Animation.AnimationId])
+                        dothetech=true
+                        lastcf = character.HumanoidRootPart.CFrame
+                        v.Stopped:Connect(function()
+                            dothetech=false
+                        end)
+                        repeat wait()
+                            workspace.Camera.CameraType = Enum.CameraType.Scriptable
+                            character.HumanoidRootPart.CFrame = CFrame.new(-1200,-460,67)
+                            character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                            character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                        until not dothetech
+                        task.wait(0.1)
+                        character.HumanoidRootPart.CFrame=lastcf
+                        workspace.Camera.CameraType = Enum.CameraType.Custom
+                        workspace.Camera.CameraSubject = character.Humanoid
+                        task.wait(1)
+                    end
+                end
+            end
+        end)
+        coroutine.resume(getgenv().loop)
+    else
+        EnableButton.Text = "Disabled"
+        StatusLabel.Text = "Status: Inactive"
+        StatusLabel.TextColor3 = COLORS.STATUS_INACTIVE
+        
+        if getgenv().loop then
+            coroutine.close(getgenv().loop)
+            getgenv().loop = nil
+        end
+    end
+    
+    
+    game:GetService("StarterGui"):SetCore("SendNotification",{
+        Title = scriptEnabled and "Enabled" or "Disabled",
+        Text = "by 09gw",
+        Duration = 2
+    })
+end)
+
+
+workspace.FallenPartsDestroyHeight = 0/0
+local plr = game.Players.LocalPlayer
+getgenv().loop = coroutine.create(function()
+end)
+coroutine.resume(getgenv().loop)
